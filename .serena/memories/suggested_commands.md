@@ -1,4 +1,4 @@
 - Install dependencies: `npm install`
 - Build TypeScript to dist: `npm run build`
 - Run MCP server in dev mode (tsx direct): `npm run dev`
-- Package entry for clients: `npx -y coderabbitai-cli-mcp` (from npm registry or local `npm link`)
+- Package entry for clients: `npx -y coderabbit-cli-mcp` (from npm registry or local `npm link`)

@@ -13,7 +13,7 @@ import { version } from './tools/version.js';
 import { cliHelp } from './tools/cliHelp.js';
 import { writeConfig, WriteConfigArgsSchema } from './tools/writeConfig.js';
 import { doctor, DoctorArgsSchema } from './tools/doctor.js';
-const server = new McpServer({ name: 'coderabbitai-cli-mcp', version: pkg.version }, {
+const server = new McpServer({ name: 'coderabbit-cli-mcp', version: pkg.version }, {
     capabilities: {
         logging: { levels: ['debug', 'info', 'notice', 'warning', 'error'] },
         tools: {},

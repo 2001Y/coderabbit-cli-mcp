@@ -1,6 +1,6 @@
 - Purpose: MCP server that exposes the CodeRabbit CLI with full install/auth/run flows so LLM clients can trigger reviews, bootstrap the CLI, and inspect diagnostics entirely over MCP.
 - Tech stack: TypeScript (ESM, Node 18+), @modelcontextprotocol/sdk for MCP plumbing, execa for subprocesses, lru-cache for report storage, zod for schemas.
-- Structure: src/server.ts bootstraps the server + transports; src/tools/* holds each MCP tool; src/lib/* provides shared helpers (coderabbit detection, git diagnosis, config template); src/resources/outputsStore.ts implements report:// resources; src/logger.ts centralizes logging; bin/coderabbitai-cli-mcp runs dist/server.js after build.
+- Structure: src/server.ts bootstraps the server + transports; src/tools/* holds each MCP tool; src/lib/* provides shared helpers (coderabbit detection, git diagnosis, config template); src/resources/outputsStore.ts implements report:// resources; src/logger.ts centralizes logging; bin/coderabbit-cli-mcp runs dist/server.js after build.
 - Logging philosophy: INFO/DEBUG/SUCCESS/WARNING/ERROR with timestamp + duration, forwarded to MCP logging notifications.
 - Resources/prompts: recent CLI outputs are exposed as report:// URIs and preset prompts describe common run_review payloads.
 - Security posture: no silent fallbacks, installers require confirm=true, Windows path handled via WSL guidance only.

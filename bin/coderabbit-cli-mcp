@@ -1,5 +1,5 @@
 #!/usr/bin/env node
 import('../dist/server.js').catch((error) => {
-  console.error('Failed to start coderabbitai-cli-mcp server:', error);
+  console.error('Failed to start coderabbit-cli-mcp server:', error);
   process.exitCode = 1;
 });

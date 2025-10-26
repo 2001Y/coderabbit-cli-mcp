@@ -15,7 +15,7 @@ import { writeConfig, WriteConfigArgsSchema } from './tools/writeConfig.js';
 import { doctor, DoctorArgsSchema } from './tools/doctor.js';
 
 const server = new McpServer(
-  { name: 'coderabbitai-cli-mcp', version: pkg.version },
+  { name: 'coderabbit-cli-mcp', version: pkg.version },
   {
     capabilities: {
       logging: { levels: ['debug', 'info', 'notice', 'warning', 'error'] },

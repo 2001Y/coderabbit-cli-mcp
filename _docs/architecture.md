@@ -1,4 +1,4 @@
-# coderabbitai-cli-mcp アーキテクチャ設計メモ
+# coderabbit-cli-mcp アーキテクチャ設計メモ
 
 ## 目的
 - CodeRabbit CLI を MCP Tools としてフル操作できるゲートウェイ。
@@ -66,4 +66,3 @@ src/
 - MCP SDK (TS) API & progress token: `@modelcontextprotocol/sdk@1.20.2`。
 - CodeRabbit CLI install/auth/options: 公式 README / --help / install.sh（o3 MCP サマリ参照）。
 - o3-search ガイダンス: サブプロセス安全化、ログ設計、report:// リソース保持戦略。
-

@@ -1,4 +1,4 @@
-# coderabbitai-cli-mcp
+# coderabbit-cli-mcp
 
 CodeRabbit CLI を Model Context Protocol (MCP) で完全操作するサーバーです。`run_review` で全フラグを JSON 指定しつつ、`ensure_cli`/`install_cli` が未導入環境でもブートストラップを実施します。実行ログはログ通知＋`report://` リソースで再参照できます。
 
@@ -6,7 +6,7 @@ CodeRabbit CLI を Model Context Protocol (MCP) で完全操作するサーバ�
 
 ```bash
 # 1-shot 実行（npm 未インストールでも npx だけで起動）
-npx -y coderabbitai-cli-mcp
+npx -y coderabbit-cli-mcp
 ```
 
 クライアント設定例（Claude Desktop）:
@@ -14,9 +14,9 @@ npx -y coderabbitai-cli-mcp
 ```json
 {
   "mcpServers": {
-    "coderabbitai-cli-mcp": {
+    "coderabbit-cli-mcp": {
       "command": "npx",
-      "args": ["-y", "coderabbitai-cli-mcp"]
+      "args": ["-y", "coderabbit-cli-mcp"]
     }
   }
 }
