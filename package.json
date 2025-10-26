@@ -1,6 +1,6 @@
 {
   "name": "coderabbit-cli-mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Model Context Protocol server that exposes the CodeRabbit CLI with full bootstrap, auth, and diagnostics tooling.",
   "type": "module",
   "bin": {
