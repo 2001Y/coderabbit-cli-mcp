@@ -1,8 +1,9 @@
 import { buildLogger } from "../utils/context.js";
 import type { ToolExtra } from "../toolContext.js";
 import { runCommand } from "../utils/command.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
-export async function authStatus(_: object, extra: ToolExtra) {
+export async function authStatus(_: object, extra: ToolExtra): Promise<CallToolResult> {
   const logger = buildLogger("auth_status", extra);
   logger.info("auth_status.begin");
 
@@ -16,5 +17,5 @@ export async function authStatus(_: object, extra: ToolExtra) {
   const status = match ? `ログイン済み: ${match[1].trim()}` : combined || "未ログインの可能性があります";
 
   logger.success("auth_status.completed", { parsed: match?.[1] });
-  return { content: [{ type: "text", text: status }] };
+  return { content: [{ type: "text", text: status }] } satisfies CallToolResult;
 }

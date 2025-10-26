@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/dist/esm/shared/protocol.js";
-import type { ServerNotification, ServerRequest } from "@modelcontextprotocol/sdk/dist/esm/types.js";
+import type { ToolExtra } from "./toolContext.js";
 
 const PHASES = {
   boot: { progress: 5, message: "boot" },
@@ -12,15 +11,13 @@ const PHASES = {
 
 export type ProgressPhase = keyof typeof PHASES;
 
-type Extra = RequestHandlerExtra<ServerRequest, ServerNotification>;
-
-export async function reportPhase(extra: Extra, phase: ProgressPhase, overrideMessage?: string) {
+export async function reportPhase(extra: ToolExtra, phase: ProgressPhase, overrideMessage?: string) {
   const details = PHASES[phase];
   if (!details) return;
 
   const token = (extra._meta as { progressToken?: string | number } | undefined)?.progressToken ?? extra.requestId ?? randomUUID();
 
-  const notification: ServerNotification = {
+  const notification = {
     jsonrpc: "2.0",
     method: "notifications/progress",
     params: {
@@ -29,7 +26,7 @@ export async function reportPhase(extra: Extra, phase: ProgressPhase, overrideMe
       total: 100,
       message: overrideMessage ?? details.message,
     },
-  } as ServerNotification;
+  };
 
   try {
     await extra.sendNotification(notification);

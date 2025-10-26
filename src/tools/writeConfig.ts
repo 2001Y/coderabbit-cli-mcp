@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { buildLogger } from "../utils/context.js";
 import type { ToolExtra } from "../toolContext.js";
 import { WriteConfigSchema } from "../types.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 const TEMPLATE = `# CodeRabbit CLI 設定テンプレート
 project:
@@ -21,7 +22,7 @@ outputs:
   verbose: true
 `;
 
-export async function writeConfig(rawArgs: unknown, extra: ToolExtra) {
+export async function writeConfig(rawArgs: unknown, extra: ToolExtra): Promise<CallToolResult> {
   const args = WriteConfigSchema.parse(rawArgs ?? {});
   const targetPath = resolve(args.targetPath ?? ".coderabbit.yaml");
   const logger = buildLogger("write_config", extra);
@@ -51,5 +52,5 @@ export async function writeConfig(rawArgs: unknown, extra: ToolExtra) {
         text: `${targetPath} にテンプレートを書き出しました。必要に応じて編集してください。`,
       },
     ],
-  };
+  } satisfies CallToolResult;
 }

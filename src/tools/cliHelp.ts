@@ -1,6 +1,7 @@
 import { buildLogger } from "../utils/context.js";
 import type { ToolExtra } from "../toolContext.js";
 import { runCommand } from "../utils/command.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 type ParsedFlag = {
   flag: string;
@@ -29,7 +30,7 @@ function parseHelp(helpText: string): ParsedFlag[] {
   return flags;
 }
 
-export async function cliHelp(_: object, extra: ToolExtra) {
+export async function cliHelp(_: object, extra: ToolExtra): Promise<CallToolResult> {
   const logger = buildLogger("cli_help", extra);
   logger.info("cli_help.begin");
 
@@ -48,5 +49,5 @@ export async function cliHelp(_: object, extra: ToolExtra) {
       { type: "text", text: text.trim() },
       { type: "text", text: `parsedFlags=\n${summary}` },
     ],
-  };
+  } satisfies CallToolResult;
 }

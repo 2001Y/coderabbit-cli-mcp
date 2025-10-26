@@ -2,10 +2,11 @@ import { URL } from "node:url";
 import { buildLogger } from "../utils/context.js";
 import type { ToolExtra } from "../toolContext.js";
 import { runCommand } from "../utils/command.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 const URL_REGEX = /https?:\/\/\S+/gi;
 
-export async function authLogin(_: object, extra: ToolExtra) {
+export async function authLogin(_: object, extra: ToolExtra): Promise<CallToolResult> {
   const logger = buildLogger("auth_login", extra);
   logger.info("auth_login.begin");
 
@@ -28,5 +29,5 @@ export async function authLogin(_: object, extra: ToolExtra) {
   }
 
   logger.success("auth_login.completed", { hasUrl: Boolean(match) });
-  return { content: [{ type: "text", text }] };
+  return { content: [{ type: "text", text }] } satisfies CallToolResult;
 }

@@ -3,10 +3,11 @@ import { buildLogger } from "../utils/context.js";
 import type { ToolExtra } from "../toolContext.js";
 import { DoctorSchema } from "../types.js";
 import { runCommand } from "../utils/command.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 const CLI_PATH_HINT = "~/.coderabbit/bin";
 
-export async function doctor(rawArgs: unknown, extra: ToolExtra) {
+export async function doctor(rawArgs: unknown, extra: ToolExtra): Promise<CallToolResult> {
   const args = DoctorSchema.parse(rawArgs ?? {});
   const cwd = resolve(args.cwd ?? process.cwd());
   const logger = buildLogger("doctor", extra);
@@ -62,5 +63,5 @@ export async function doctor(rawArgs: unknown, extra: ToolExtra) {
 
   const text = sections.join("\n");
   logger.success("doctor.completed");
-  return { content: [{ type: "text", text }] };
+  return { content: [{ type: "text", text }] } satisfies CallToolResult;
 }

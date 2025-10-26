@@ -1,8 +1,9 @@
 import express from "express";
+import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import pkg from "../package.json" assert { type: "json" };
+import pkg from "../package.json" with { type: "json" };
 import { registerResources } from "./resources/outputsStore.js";
 import { registerPrompts } from "./prompts.js";
 import { runReview } from "./tools/runReview.js";
@@ -22,6 +23,7 @@ import {
   DoctorSchema,
   type RunReviewInput,
 } from "./types.js";
+import type { ToolExtra } from "./toolContext.js";
 
 const server = new McpServer({
   name: "coderabbitai-cli-mcp",
@@ -38,7 +40,7 @@ server.registerTool(
     description: "CodeRabbit CLI を全オプション指定で実行します",
     inputSchema: RunReviewInputSchema.shape,
   },
-  (args, extra) => runReview(args as RunReviewInput, extra),
+  (args, extra) => runReview(args as RunReviewInput, extra as ToolExtra),
 );
 
 server.registerTool(
@@ -47,7 +49,7 @@ server.registerTool(
     title: "CodeRabbit CLI の検出/導入",
     inputSchema: EnsureCliInputSchema.shape,
   },
-  (args, extra) => ensureCli(args, extra),
+  (args, extra) => ensureCli(args, extra as ToolExtra),
 );
 
 server.registerTool(
@@ -56,28 +58,36 @@ server.registerTool(
     title: "CodeRabbit CLI インストール",
     inputSchema: InstallCliInputSchema.shape,
   },
-  (args, extra) => installCli(args, extra),
+  (args, extra) => installCli(args, extra as ToolExtra),
 );
 
 server.registerTool(
   "auth_login",
   { title: "CodeRabbit CLI ログイン" },
-  (_, extra) => authLogin({}, extra),
+  (_, extra) => authLogin({}, extra as ToolExtra),
 );
 server.registerTool(
   "auth_status",
   { title: "CodeRabbit ログイン状態" },
-  (_, extra) => authStatus({}, extra),
+  (_, extra) => authStatus({}, extra as ToolExtra),
 );
-server.registerTool("version", { title: "CodeRabbit CLI バージョン" }, (_, extra) => cliVersion({}, extra));
-server.registerTool("cli_help", { title: "CodeRabbit CLI --help" }, (_, extra) => cliHelp({}, extra));
+server.registerTool(
+  "version",
+  { title: "CodeRabbit CLI バージョン" },
+  (_, extra) => cliVersion({}, extra as ToolExtra),
+);
+server.registerTool(
+  "cli_help",
+  { title: "CodeRabbit CLI --help" },
+  (_, extra) => cliHelp({}, extra as ToolExtra),
+);
 server.registerTool(
   "write_config",
   {
     title: ".coderabbit.yaml を生成",
     inputSchema: WriteConfigSchema.shape,
   },
-  (args, extra) => writeConfig(args, extra),
+  (args, extra) => writeConfig(args, extra as ToolExtra),
 );
 server.registerTool(
   "doctor",
@@ -85,7 +95,7 @@ server.registerTool(
     title: "環境診断",
     inputSchema: DoctorSchema.shape,
   },
-  (args, extra) => doctor(args, extra),
+  (args, extra) => doctor(args, extra as ToolExtra),
 );
 
 function parseFlags() {
@@ -119,6 +129,7 @@ async function startHttpServer(port: number) {
   app.post("/mcp", async (req, res) => {
     const transport = new StreamableHTTPServerTransport({
       enableJsonResponse: true,
+      sessionIdGenerator: () => randomUUID(),
     });
     res.on("close", () => transport.close());
     await server.connect(transport);

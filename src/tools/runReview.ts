@@ -7,6 +7,7 @@ import { runCommand } from "../utils/command.js";
 import { saveOutput } from "../resources/outputsStore.js";
 import { RunReviewInputSchema, DEFAULT_TIMEOUT_SEC } from "../types.js";
 import type { RunReviewInput } from "../types.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 function ensureConfigFiles(files: string[] | undefined) {
   if (!files?.length) return [];
@@ -39,7 +40,7 @@ function buildCliArgs(args: Required<Pick<RunReviewInput, "mode" | "type" | "bas
   return cliArgs;
 }
 
-export async function runReview(rawArgs: RunReviewInput, extra: ToolExtra) {
+export async function runReview(rawArgs: RunReviewInput, extra: ToolExtra): Promise<CallToolResult> {
   const parsed = RunReviewInputSchema.parse(rawArgs);
   const normalized = {
     mode: parsed.mode ?? "plain",
@@ -90,5 +91,5 @@ export async function runReview(rawArgs: RunReviewInput, extra: ToolExtra) {
       { type: "text", text: cleaned },
       { type: "text", text: `report: ${uri}` },
     ],
-  };
+  } satisfies CallToolResult;
 }

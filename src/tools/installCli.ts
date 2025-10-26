@@ -3,10 +3,11 @@ import { buildLogger } from "../utils/context.js";
 import type { ToolExtra } from "../toolContext.js";
 import type { InstallCliInput } from "../types.js";
 import { runCommand } from "../utils/command.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 export const INSTALL_COMMAND = "curl -fsSL https://cli.coderabbit.ai/install.sh | sh";
 
-export async function installCli(args: InstallCliInput, extra: ToolExtra) {
+export async function installCli(args: InstallCliInput, extra: ToolExtra): Promise<CallToolResult> {
   const logger = buildLogger("install_cli", extra);
   logger.info("install_cli.begin", { args });
 
@@ -14,7 +15,7 @@ export async function installCli(args: InstallCliInput, extra: ToolExtra) {
   if (platform === "win32") {
     const message = `Windows では CodeRabbit CLI は公式サポートされていません。WSL2 上で \`${INSTALL_COMMAND}\` を実行してください。`;
     logger.warning("install_cli.unsupported_platform", { platform });
-    return { content: [{ type: "text", text: message }] };
+    return { content: [{ type: "text", text: message }] } satisfies CallToolResult;
   }
 
   if (args.dryRun) {
@@ -26,7 +27,7 @@ export async function installCli(args: InstallCliInput, extra: ToolExtra) {
           text: `dryRun=true のため以下を実行予定です:\n${INSTALL_COMMAND}`,
         },
       ],
-    };
+    } satisfies CallToolResult;
   }
 
   const result = await runCommand("sh", ["-c", INSTALL_COMMAND], logger, {
@@ -42,5 +43,5 @@ export async function installCli(args: InstallCliInput, extra: ToolExtra) {
         text: result.stdout || "CodeRabbit CLI installation finished.",
       },
     ],
-  };
+  } satisfies CallToolResult;
 }
