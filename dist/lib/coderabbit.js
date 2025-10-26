@@ -42,7 +42,7 @@ export async function resolveCoderabbitBinary(forceRefresh = false) {
             }
         }
     }
-    throw new Error('coderabbit CLI not found on PATH. Run ensure_cli to install or set CODERABBIT_CLI_PATH.');
+    throw new Error('coderabbit CLI not found on PATH. Use run_review to receive setup guidance or set CODERABBIT_CLI_PATH.');
 }
 export async function coderabbitVersion(forceRefresh = false) {
     if (!forceRefresh && cachedVersion) {
@@ -64,7 +64,7 @@ export async function runCoderabbitSubcommand(args, options = {}) {
     return execa(binary, args, {
         cwd: options.cwd,
         timeout: options.timeoutMs,
-        signal: options.signal,
+        cancelSignal: options.cancelSignal,
         all: true,
         reject: false,
         env: options.env

@@ -5,14 +5,6 @@ import { registerResources } from './resources/outputsStore.js';
 import { registerPrompts } from './prompts.js';
 import { registerLogTransmitter } from './logger.js';
 import { runReview, RunReviewArgsSchema } from './tools/runReview.js';
-import { ensureCli, EnsureCliArgsSchema } from './tools/ensureCli.js';
-import { installCli, InstallCliArgsSchema } from './tools/installCli.js';
-import { authLogin, AuthLoginArgsSchema } from './tools/authLogin.js';
-import { authStatus } from './tools/authStatus.js';
-import { version } from './tools/version.js';
-import { cliHelp } from './tools/cliHelp.js';
-import { writeConfig, WriteConfigArgsSchema } from './tools/writeConfig.js';
-import { doctor, DoctorArgsSchema } from './tools/doctor.js';
 const server = new McpServer({ name: 'coderabbit-cli-mcp', version: pkg.version }, {
     capabilities: {
         logging: { levels: ['debug', 'info', 'notice', 'warning', 'error'] },
@@ -20,7 +12,7 @@ const server = new McpServer({ name: 'coderabbit-cli-mcp', version: pkg.version 
         prompts: {},
         resources: {}
     },
-    instructions: 'Use run_review for CodeRabbit CLI execution, ensure_cli/install_cli for bootstrap, and auth_* tools for authentication. Outputs are mirrored under report:// resources.'
+    instructions: 'Use run_review to execute CodeRabbit reviews. Setup or authentication guidance is returned inline when prerequisites are missing. Outputs are mirrored under report:// resources.'
 });
 const levelMap = {
     DEBUG: 'debug',
@@ -44,19 +36,21 @@ registerLogTransmitter(async (entry) => {
             }
         });
     }
-    catch {
-        // fall back silently; stderr already received the log
+    catch (error) {
+        const failure = {
+            ts: new Date().toISOString(),
+            scope: entry.scope,
+            level: entry.level,
+            message: entry.message,
+            meta: entry.meta,
+            err: error instanceof Error
+                ? { name: error.name, message: error.message, stack: error.stack }
+                : { value: String(error) }
+        };
+        console.error(`[server.logging] failed to forward log to MCP: ${JSON.stringify(failure)}`);
     }
 });
 server.tool('run_review', RunReviewArgsSchema.shape, async (args, ctx) => runReview(args, ctx));
-server.tool('ensure_cli', EnsureCliArgsSchema.shape, (args, ctx) => ensureCli(args, ctx));
-server.tool('install_cli', InstallCliArgsSchema.shape, (args, ctx) => installCli(args, ctx));
-server.tool('auth_login', AuthLoginArgsSchema.shape, (args, ctx) => authLogin(args, ctx));
-server.tool('auth_status', async (ctx) => authStatus(ctx));
-server.tool('version', () => version());
-server.tool('cli_help', () => cliHelp());
-server.tool('write_config', WriteConfigArgsSchema.shape, (args) => writeConfig(args));
-server.tool('doctor', DoctorArgsSchema.shape, (args) => doctor(args));
 registerResources(server);
 registerPrompts(server);
 const transport = new StdioServerTransport();

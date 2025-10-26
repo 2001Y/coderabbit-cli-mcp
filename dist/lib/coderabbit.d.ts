@@ -4,12 +4,12 @@ export declare function clearCachedBinary(): void;
 export declare function runCoderabbitSubcommand(args: string[], options?: {
     cwd?: string;
     timeoutMs?: number;
-    signal?: AbortSignal;
+    cancelSignal?: AbortSignal;
     env?: Record<string, string>;
 }): Promise<import("execa").Result<{
     cwd: string | undefined;
     timeout: number | undefined;
-    signal: AbortSignal | undefined;
+    cancelSignal: AbortSignal | undefined;
     all: true;
     reject: false;
     env: Record<string, string> | undefined;

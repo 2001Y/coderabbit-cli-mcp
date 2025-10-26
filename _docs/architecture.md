@@ -1,10 +1,10 @@
 # coderabbit-cli-mcp アーキテクチャ設計メモ
 
 ## 目的
-- CodeRabbit CLI を MCP Tools としてフル操作できるゲートウェイ。
-- CLI 未導入環境でも `ensure_cli` → `install_cli` → `auth_login` → `run_review` までワンストップで自動化。
+- CodeRabbit CLI を MCP の `run_review` ツール 1 本で実行できるゲートウェイ。
+- CLI 未導入・未認証などの初回セットアップ情報も `run_review` のレスポンス内で案内し、追加ツールを不要にする。
 - 進捗・ログ・リソースを MCP 標準（notifications/progress・resources・prompts）に沿って提供。
-- 失敗や未知フラグを握りつぶさず「即エラー」で顕在化。
+- 失敗は必ず ERROR として顕在化させ、必要な対処ガイドを同じメッセージで提示する。
 
 ## モジュール構成
 ```
@@ -16,13 +16,10 @@ src/
   prompts.ts                // プリセット MCP プロンプト
   resources/outputsStore.ts // report://{tool}/{id} ストア + resource/list/read 実装
   lib/
-    coderabbit.ts           // バイナリ検出/キャッシュ、バージョン確認、共通 env
-    process.ts              // execa ベースの subprocess 走行 + ログ/リソース連携
-    template.ts             // write_config 用テンプレ生成
-    git.ts                  // doctor 用 git/リポジトリ診断
+    coderabbit.ts           // バイナリ検出/キャッシュ、バージョン確認
   tools/
-    runReview.ts, ensureCli.ts, installCli.ts, authLogin.ts,
-    authStatus.ts, version.ts, cliHelp.ts, writeConfig.ts, doctor.ts
+    runReview.ts            // 唯一の実行ツール。セットアップガイドも内包
+    installGuide.ts         // OS 別インストール手順を生成するヘルパー
 ```
 
 ## ロギング方針
@@ -49,12 +46,10 @@ src/
 - `extraArgs` はそのまま末尾へ。既知フラグとの衝突は検出して ERROR。
 - config ファイルは `fs.accessSync` で存在確認し、正規化した絶対パスを渡す。
 
-## インストール/認証フロー
-- `ensure_cli` が `resolveCoderabbitBinary()` → 失敗時 `install_cli` を呼び出し。
-- `install_cli` は macOS/Linux のみ直接インストール。Windows は WSL2 手順案内。
-- 実行前に INFO ログでコマンド全文を提示。`confirm: true` を要求（dryRun は常に許可）。
-- 認証ツール：`auth_login` が `coderabbit auth login --no-browser`（可能なら）を実行し、URL を抽出。
-- `auth_status` は `coderabbit auth status` を走らせ、整形テキスト + 生ログ（report://）を返す。
+## 初回セットアップ誘導
+- `run_review` が coderabbit バイナリを検出できない場合、OS 判定付きのインストール & 認証手順を ERROR メッセージ内で返す。
+- CLI 実行が exit code ≠ 0 だった場合も stdout/stderr を解析し、「未ログイン」「設定不足」など代表的な初回エラーに対する手順を返す。
+- 追加ツールでの再実行は不要。ユーザーは案内通りに CLI をセットアップし、同じ `run_review` を再実行するだけでよい。
 
 ## プロンプト
 - `review_local_uncommitted`: mode=plain, type=uncommitted。

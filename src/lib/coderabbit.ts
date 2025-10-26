@@ -51,7 +51,7 @@ export async function resolveCoderabbitBinary(forceRefresh = false): Promise<str
     }
   }
 
-  throw new Error('coderabbit CLI not found on PATH. Run ensure_cli to install or set CODERABBIT_CLI_PATH.');
+  throw new Error('coderabbit CLI not found on PATH. Use run_review to receive setup guidance or set CODERABBIT_CLI_PATH.');
 }
 
 export async function coderabbitVersion(forceRefresh = false): Promise<string> {
@@ -74,14 +74,14 @@ export function clearCachedBinary() {
 export async function runCoderabbitSubcommand(args: string[], options: {
   cwd?: string;
   timeoutMs?: number;
-  signal?: AbortSignal;
+  cancelSignal?: AbortSignal;
   env?: Record<string, string>;
 } = {}) {
   const binary = await resolveCoderabbitBinary();
   return execa(binary, args, {
     cwd: options.cwd,
     timeout: options.timeoutMs,
-    signal: options.signal,
+    cancelSignal: options.cancelSignal,
     all: true,
     reject: false,
     env: options.env

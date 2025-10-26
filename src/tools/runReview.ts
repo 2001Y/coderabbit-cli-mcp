@@ -8,6 +8,9 @@ import { createLogger, createStopwatch } from '../logger.js';
 import type { ToolContext } from '../types.js';
 import { sendProgress } from '../progress.js';
 import { storeReport } from '../resources/outputsStore.js';
+import { buildInstallGuide } from './installGuide.js';
+
+const USER_ESCALATION_NOTE = 'Codex must stop here, report the situation to the requesting user, and wait for further instructions.';
 
 const log = createLogger('tools.run_review');
 
@@ -56,7 +59,8 @@ function buildArgv(parsed: RunReviewArgs): string[] {
   return args;
 }
 
-export async function runReview(args: RunReviewArgs, ctx: ToolContext): Promise<CallToolResult> {
+export async function runReview(rawArgs: unknown, ctx: ToolContext): Promise<CallToolResult> {
+  const args = RunReviewArgsSchema.parse(rawArgs ?? {});
   const stopwatch = createStopwatch();
   const argv = buildArgv(args);
   const cwd = args.cwd ? resolve(args.cwd) : process.cwd();
@@ -69,11 +73,25 @@ export async function runReview(args: RunReviewArgs, ctx: ToolContext): Promise<
   await log.info('starting coderabbit run_review', { argv, cwd });
   await sendProgress(ctx, { progress: 5, total: 100, message: 'boot' });
 
-  const binary = await resolveCoderabbitBinary();
+  let binary: string;
+  try {
+    binary = await resolveCoderabbitBinary();
+  } catch (error) {
+    const guide = buildInstallGuide();
+    await log.error('coderabbit binary missing', { reason: (error as Error).message });
+    throw new Error([
+      'CodeRabbit CLI was not found on PATH.',
+      `Details: ${(error as Error).message}`,
+      '',
+      guide,
+      '',
+      USER_ESCALATION_NOTE
+    ].join('\n'));
+  }
   const child = execa(binary, argv, {
     cwd,
     timeout: (args.timeoutSec ?? 3600) * 1000,
-    signal: ctx.signal,
+    cancelSignal: ctx.signal,
     stdout: 'pipe',
     stderr: 'pipe',
     reject: false
@@ -115,8 +133,15 @@ export async function runReview(args: RunReviewArgs, ctx: ToolContext): Promise<
     });
 
     if (exitCode !== 0) {
-      await log.error('coderabbit exited with non-zero status', { exitCode, uri });
-      throw new Error(`coderabbit exited with code ${exitCode}. Output stored at ${uri}`);
+      const guidance = inferRunFailureGuidance(combined);
+      await log.error('coderabbit exited with non-zero status', { exitCode, uri, hasGuidance: Boolean(guidance) });
+      const messageParts = [
+        `coderabbit exited with code ${exitCode}.`,
+        guidance ? `\nSuggested next steps:\n${guidance}` : undefined,
+        `\nLog capture: ${uri}`,
+        `\n${USER_ESCALATION_NOTE}`
+      ].filter(Boolean) as string[];
+      throw new Error(messageParts.join('\n'));
     }
 
     await log.success('coderabbit review completed', { exitCode, uri }, durationMs);
@@ -132,4 +157,24 @@ export async function runReview(args: RunReviewArgs, ctx: ToolContext): Promise<
   } finally {
     clearInterval(heartbeat);
   }
+}
+
+function inferRunFailureGuidance(output: string): string | null {
+  const text = output.toLowerCase();
+  if (text.includes('not logged in') || text.includes('login to continue') || text.includes('authentication')) {
+    return buildAuthGuide();
+  }
+  if (text.includes('ensure_cli') || text.includes('install cli') || text.includes('command not found')) {
+    return buildInstallGuide();
+  }
+  return null;
+}
+
+function buildAuthGuide(): string {
+  return [
+    'Authentication appears incomplete. Please perform the following steps manually:',
+    '1. Run `coderabbit auth login` in your terminal and open the printed URL in a browser to finish login.',
+    '2. Run `coderabbit auth status` and confirm it prints "Logged in as ...".',
+    '3. Re-run run_review once the CLI reports a logged-in state.'
+  ].join('\n');
 }
