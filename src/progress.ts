@@ -1,36 +1,31 @@
-import { randomUUID } from "node:crypto";
-import type { ToolExtra } from "./toolContext.js";
+import type { ToolContext } from './types.js';
+import { createLogger } from './logger.js';
 
-const PHASES = {
-  boot: { progress: 5, message: "boot" },
-  scanning: { progress: 30, message: "scanning" },
-  analyzing: { progress: 60, message: "analyzing" },
-  formatting: { progress: 85, message: "formatting" },
-  done: { progress: 100, message: "done" },
-} as const;
+const log = createLogger('progress');
 
-export type ProgressPhase = keyof typeof PHASES;
+export interface ProgressPhase {
+  progress: number;
+  message: string;
+  total?: number;
+}
 
-export async function reportPhase(extra: ToolExtra, phase: ProgressPhase, overrideMessage?: string) {
-  const details = PHASES[phase];
-  if (!details) return;
-
-  const token = (extra._meta as { progressToken?: string | number } | undefined)?.progressToken ?? extra.requestId ?? randomUUID();
-
-  const notification = {
-    jsonrpc: "2.0",
-    method: "notifications/progress",
-    params: {
-      progressToken: token,
-      progress: details.progress,
-      total: 100,
-      message: overrideMessage ?? details.message,
-    },
-  };
+export async function sendProgress(ctx: ToolContext, phase: ProgressPhase): Promise<void> {
+  const token = ctx._meta?.progressToken;
+  if (!token) {
+    return;
+  }
 
   try {
-    await extra.sendNotification(notification);
-  } catch {
-    // progress failure should not break the tool invocation
+    await ctx.sendNotification({
+      method: 'notifications/progress',
+      params: {
+        progressToken: token,
+        progress: phase.progress,
+        ...(typeof phase.total === 'number' ? { total: phase.total } : {}),
+        ...(phase.message ? { message: phase.message } : {})
+      }
+    } as never);
+  } catch (error) {
+    await log.warn('failed to send progress notification', { error: (error as Error).message });
   }
 }

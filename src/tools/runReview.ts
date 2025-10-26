@@ -1,95 +1,135 @@
-import { existsSync, statSync } from "node:fs";
-import { resolve } from "node:path";
-import { buildLogger } from "../utils/context.js";
-import type { ToolExtra } from "../toolContext.js";
-import { reportPhase } from "../progress.js";
-import { runCommand } from "../utils/command.js";
-import { saveOutput } from "../resources/outputsStore.js";
-import { RunReviewInputSchema, DEFAULT_TIMEOUT_SEC } from "../types.js";
-import type { RunReviewInput } from "../types.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { existsSync, statSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { z } from 'zod';
+import { execa } from 'execa';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/dist/esm/types';
+import { resolveCoderabbitBinary } from '../lib/coderabbit.js';
+import { createLogger, createStopwatch } from '../logger.js';
+import type { ToolContext } from '../types.js';
+import { sendProgress } from '../progress.js';
+import { storeReport } from '../resources/outputsStore.js';
 
-function ensureConfigFiles(files: string[] | undefined) {
-  if (!files?.length) return [];
-  return files.map((file) => {
-    const absolute = resolve(file);
-    if (!existsSync(absolute) || !statSync(absolute).isFile()) {
-      throw new Error(`config file not found: ${absolute}`);
+const log = createLogger('tools.run_review');
+
+export const RunReviewArgsSchema = z.object({
+  mode: z.enum(['interactive', 'plain', 'prompt-only']).default('plain'),
+  type: z.enum(['all', 'committed', 'uncommitted']).default('all').optional(),
+  base: z.string().optional(),
+  baseCommit: z.string().optional(),
+  cwd: z.string().optional(),
+  configFiles: z.array(z.string()).optional(),
+  noColor: z.boolean().optional(),
+  timeoutSec: z.number().int().positive().max(4 * 3600).optional(),
+  extraArgs: z.array(z.string()).optional()
+});
+
+export type RunReviewArgs = z.infer<typeof RunReviewArgsSchema>;
+
+function buildArgv(parsed: RunReviewArgs): string[] {
+  const args: string[] = [];
+  const mode = parsed.mode ?? 'plain';
+  if (mode === 'plain') args.push('--plain');
+  if (mode === 'prompt-only') args.push('--prompt-only');
+
+  const reviewType = parsed.type ?? 'all';
+  args.push('--type', reviewType);
+
+  if (parsed.base) args.push('--base', parsed.base);
+  if (parsed.baseCommit) args.push('--base-commit', parsed.baseCommit);
+  if (parsed.noColor) args.push('--no-color');
+  if (parsed.cwd) args.push('--cwd', resolve(parsed.cwd));
+
+  if (parsed.configFiles?.length) {
+    for (const file of parsed.configFiles) {
+      const path = resolve(file);
+      if (!existsSync(path)) {
+        throw new Error(`config file not found: ${path}`);
+      }
+      args.push('-c', path);
     }
-    return absolute;
-  });
-}
-
-function buildCliArgs(args: Required<Pick<RunReviewInput, "mode" | "type" | "base" | "baseCommit" | "cwd" | "configFiles" | "noColor" | "extraArgs">>) {
-  const cliArgs: string[] = [];
-
-  if (args.mode === "plain") cliArgs.push("--plain");
-  if (args.mode === "prompt-only") cliArgs.push("--prompt-only");
-
-  if (args.type && args.type !== "all") cliArgs.push("--type", args.type);
-  if (args.base) cliArgs.push("--base", args.base);
-  if (args.baseCommit) cliArgs.push("--base-commit", args.baseCommit);
-  if (args.cwd) cliArgs.push("--cwd", resolve(args.cwd));
-  if (args.noColor) cliArgs.push("--no-color");
-
-  for (const file of args.configFiles ?? []) {
-    cliArgs.push("-c", file);
   }
 
-  if (args.extraArgs.length) cliArgs.push(...args.extraArgs);
-  return cliArgs;
-}
-
-export async function runReview(rawArgs: RunReviewInput, extra: ToolExtra): Promise<CallToolResult> {
-  const parsed = RunReviewInputSchema.parse(rawArgs);
-  const normalized = {
-    mode: parsed.mode ?? "plain",
-    type: parsed.type ?? "all",
-    base: parsed.base ?? "",
-    baseCommit: parsed.baseCommit ?? "",
-    cwd: parsed.cwd ?? process.cwd(),
-    configFiles: ensureConfigFiles(parsed.configFiles),
-    noColor: parsed.noColor ?? false,
-    timeoutSec: parsed.timeoutSec ?? DEFAULT_TIMEOUT_SEC,
-    extraArgs: parsed.extraArgs ?? [],
-  };
-
-  const logger = buildLogger("run_review", extra);
-  logger.info("run_review.begin", { normalized });
-
-  if (!existsSync(normalized.cwd)) {
-    throw new Error(`cwd not found: ${normalized.cwd}`);
+  if (parsed.extraArgs?.length) {
+    args.push(...parsed.extraArgs);
   }
 
-  const cliArgs = buildCliArgs(normalized);
-  await reportPhase(extra, "boot");
+  return args;
+}
 
-  const timeoutMs = normalized.timeoutSec * 1000;
-  await reportPhase(extra, "scanning");
-  const result = await runCommand("coderabbit", cliArgs, logger, {
-    cwd: normalized.cwd,
-    timeoutMs,
-    signal: extra.signal,
+export async function runReview(args: RunReviewArgs, ctx: ToolContext): Promise<CallToolResult> {
+  const stopwatch = createStopwatch();
+  const argv = buildArgv(args);
+  const cwd = args.cwd ? resolve(args.cwd) : process.cwd();
+  if (args.cwd) {
+    if (!existsSync(cwd) || !statSync(cwd).isDirectory()) {
+      throw new Error(`cwd not found: ${cwd}`);
+    }
+  }
+
+  await log.info('starting coderabbit run_review', { argv, cwd });
+  await sendProgress(ctx, { progress: 5, total: 100, message: 'boot' });
+
+  const binary = await resolveCoderabbitBinary();
+  const child = execa(binary, argv, {
+    cwd,
+    timeout: (args.timeoutSec ?? 3600) * 1000,
+    signal: ctx.signal,
+    stdout: 'pipe',
+    stderr: 'pipe',
+    reject: false
+  });
+  await sendProgress(ctx, { progress: 20, total: 100, message: 'scanning' });
+
+  let stdoutBuffer = '';
+  let stderrBuffer = '';
+  child.stdout?.on('data', (chunk: Buffer | string) => {
+    const text = chunk.toString();
+    stdoutBuffer += text;
+    log.debug('coderabbit stdout chunk', { bytes: chunk.length });
+  });
+  child.stderr?.on('data', (chunk: Buffer | string) => {
+    const text = chunk.toString();
+    stderrBuffer += text;
+    log.debug('coderabbit stderr chunk', { bytes: chunk.length });
   });
 
-  await reportPhase(extra, "analyzing");
-  const textOutput = result.combined?.trim() || [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
-  const cleaned = textOutput || "(CodeRabbit CLI からの出力は空でした)";
-  const uri = saveOutput({
-    text: cleaned,
-    tool: "run_review",
-    requestId: logger.requestId,
-    summary: `${normalized.mode}/${normalized.type}`,
-  });
+  const heartbeat = setInterval(() => {
+    void log.debug('run_review heartbeat', { bytes: stdoutBuffer.length + stderrBuffer.length });
+  }, 15_000);
 
-  await reportPhase(extra, "formatting");
-  await reportPhase(extra, "done");
-  logger.success("run_review.completed", { uri });
+  try {
+    const result = await child;
+    await sendProgress(ctx, { progress: 35, total: 100, message: 'analyzing' });
+    await sendProgress(ctx, { progress: 70, total: 100, message: 'formatting' });
+    await sendProgress(ctx, { progress: 100, total: 100, message: 'done' });
 
-  return {
-    content: [
-      { type: "text", text: cleaned },
-      { type: "text", text: `report: ${uri}` },
-    ],
-  } satisfies CallToolResult;
+    const combined = [stdoutBuffer, stderrBuffer].filter(Boolean).join('\n');
+    const durationMs = stopwatch();
+    const exitCode = result.exitCode ?? 0;
+
+    const { uri } = storeReport({
+      tool: 'run_review',
+      title: `run_review exit ${exitCode}`,
+      body: combined || result.stdout || result.stderr || '',
+      durationMs
+    });
+
+    if (exitCode !== 0) {
+      await log.error('coderabbit exited with non-zero status', { exitCode, uri });
+      throw new Error(`coderabbit exited with code ${exitCode}. Output stored at ${uri}`);
+    }
+
+    await log.success('coderabbit review completed', { exitCode, uri }, durationMs);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `CodeRabbit review completed in ${(durationMs / 1000).toFixed(1)}s. See ${uri}`
+        }
+      ]
+    };
+  } finally {
+    clearInterval(heartbeat);
+  }
 }

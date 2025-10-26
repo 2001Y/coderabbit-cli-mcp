@@ -1,56 +1,32 @@
-import { access, writeFile } from "node:fs/promises";
-import { constants } from "node:fs";
-import { resolve } from "node:path";
-import { buildLogger } from "../utils/context.js";
-import type { ToolExtra } from "../toolContext.js";
-import { WriteConfigSchema } from "../types.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { existsSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { z } from 'zod';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/dist/esm/types';
+import { createLogger } from '../logger.js';
+import { buildCoderabbitConfigTemplate } from '../lib/template.js';
 
-const TEMPLATE = `# CodeRabbit CLI 設定テンプレート
-project:
-  name: default
-review:
-  mode: plain # interactive | plain | prompt-only
-  type: uncommitted # all | committed | uncommitted
-  max_diffs: 2000
-  include:
-    - src/**
-  exclude:
-    - node_modules/**
-outputs:
-  format: markdown
-  verbose: true
-`;
+const log = createLogger('tools.write_config');
 
-export async function writeConfig(rawArgs: unknown, extra: ToolExtra): Promise<CallToolResult> {
-  const args = WriteConfigSchema.parse(rawArgs ?? {});
-  const targetPath = resolve(args.targetPath ?? ".coderabbit.yaml");
-  const logger = buildLogger("write_config", extra);
-  logger.info("write_config.begin", { targetPath, force: args.force });
+export const WriteConfigArgsSchema = z.object({
+  path: z.string().optional().default('./.coderabbit.yaml'),
+  overwrite: z.boolean().optional().default(false)
+});
 
-  let exists = false;
-  try {
-    await access(targetPath, constants.F_OK);
-    exists = true;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw error;
-    }
+export async function writeConfig(rawArgs: unknown): Promise<CallToolResult> {
+  const args = WriteConfigArgsSchema.parse(rawArgs ?? {});
+  const target = resolve(args.path);
+  if (!args.overwrite && existsSync(target)) {
+    throw new Error(`config already exists at ${target}. Pass overwrite=true to replace.`);
   }
 
-  if (exists && !args.force) {
-    throw new Error(`${targetPath} は既に存在します。force=true を指定してください。`);
-  }
-
-  await writeFile(targetPath, TEMPLATE, { encoding: "utf8" });
-  logger.success("write_config.completed", { targetPath });
-
+  writeFileSync(target, buildCoderabbitConfigTemplate(), 'utf8');
+  await log.success('wrote config template', { target, overwrite: args.overwrite });
   return {
     content: [
       {
-        type: "text",
-        text: `${targetPath} にテンプレートを書き出しました。必要に応じて編集してください。`,
-      },
-    ],
-  } satisfies CallToolResult;
+        type: 'text',
+        text: `Created CodeRabbit config template at ${target}`
+      }
+    ]
+  };
 }

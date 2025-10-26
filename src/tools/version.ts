@@ -1,18 +1,19 @@
-import { buildLogger } from "../utils/context.js";
-import type { ToolExtra } from "../toolContext.js";
-import { runCommand } from "../utils/command.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult } from '@modelcontextprotocol/sdk/dist/esm/types';
+import { coderabbitVersion, resolveCoderabbitBinary } from '../lib/coderabbit.js';
+import { createLogger } from '../logger.js';
 
-export async function version(_: object, extra: ToolExtra): Promise<CallToolResult> {
-  const logger = buildLogger("version", extra);
-  logger.info("version.begin");
+const log = createLogger('tools.version');
 
-  const result = await runCommand("coderabbit", ["--version"], logger, {
-    signal: extra.signal,
-    timeoutMs: 15 * 1000,
-  });
-
-  const text = result.stdout.trim() || result.combined?.trim() || result.stderr.trim();
-  logger.success("version.completed", { text });
-  return { content: [{ type: "text", text }] } satisfies CallToolResult;
+export async function version(): Promise<CallToolResult> {
+  const binary = await resolveCoderabbitBinary();
+  const versionValue = await coderabbitVersion();
+  await log.success('version retrieved', { binary, version: versionValue });
+  return {
+    content: [
+      {
+        type: 'text',
+        text: `coderabbit version ${versionValue} (${binary})`
+      }
+    ]
+  };
 }

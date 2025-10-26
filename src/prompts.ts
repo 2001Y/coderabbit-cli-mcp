@@ -1,62 +1,46 @@
-import { z } from "zod";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-
-const baseArgs = {
-  notes: z.string().optional().describe("追加で共有したい context"),
-};
-
-const buildMessage = (preset: string, notes?: string) =>
-  `run_review を ${preset} で実行してください.${notes ? `\n補足: ${notes}` : ""}`;
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { GetPromptResult } from '@modelcontextprotocol/sdk/dist/esm/types';
 
 export function registerPrompts(server: McpServer) {
-  server.registerPrompt(
-    "review-local",
+  const prompts = [
     {
-      title: "ローカル差分レビュー (plain/uncommitted)",
-      description: "plain モード + 未コミット差分",
-      argsSchema: baseArgs,
+      name: 'review_local_uncommitted',
+      description: 'Run CodeRabbit review on uncommitted changes with plain output.',
+      payload: JSON.stringify({ tool: 'run_review', arguments: { mode: 'plain', type: 'uncommitted' } }, null, 2)
     },
-    ({ notes }) => ({
-      messages: [
-        {
-          role: "user",
-          content: { type: "text", text: buildMessage("mode=plain, type=uncommitted", notes) },
-        },
-      ],
-    }),
-  );
+    {
+      name: 'review_all_plain',
+      description: 'Review entire repository with default plain output.',
+      payload: JSON.stringify({ tool: 'run_review', arguments: { mode: 'plain', type: 'all' } }, null, 2)
+    },
+    {
+      name: 'prompt_only_uncommitted',
+      description: 'Minimal prompt-only run against uncommitted diff for LLM agents.',
+      payload: JSON.stringify({ tool: 'run_review', arguments: { mode: 'prompt-only', type: 'uncommitted' } }, null, 2)
+    }
+  ];
 
-  server.registerPrompt(
-    "review-all",
-    {
-      title: "全差分レビュー (plain/all)",
-      description: "コミット済みを含む全差分",
-      argsSchema: baseArgs,
-    },
-    ({ notes }) => ({
-      messages: [
-        {
-          role: "user",
-          content: { type: "text", text: buildMessage("mode=plain, type=all", notes) },
-        },
-      ],
-    }),
-  );
-
-  server.registerPrompt(
-    "prompt-only-uncommitted",
-    {
-      title: "LLM 連携用最小出力",
-      description: "--prompt-only + 未コミット差分",
-      argsSchema: baseArgs,
-    },
-    ({ notes }) => ({
-      messages: [
-        {
-          role: "user",
-          content: { type: "text", text: buildMessage("mode=prompt-only, type=uncommitted", notes) },
-        },
-      ],
-    }),
-  );
+  for (const prompt of prompts) {
+    server.prompt(
+      prompt.name,
+      prompt.description,
+      async () => ({
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Invoke the run_review tool with the following JSON arguments:'
+              },
+              {
+                type: 'text',
+                text: prompt.payload
+              }
+            ]
+          }
+        ]
+      } as GetPromptResult)
+    );
+  }
 }

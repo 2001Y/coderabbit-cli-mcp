@@ -1,0 +1,7 @@
+- Use modern TypeScript (NodeNext modules) with strict mode; prefer named exports and explicit types.
+- All tools validated with zod schemas; defaults live inside schemas so server + implementation share a single source of truth.
+- Logging must go through src/logger.ts to ensure INFO/DEBUG/SUCCESS/WARNING/ERROR consistency and forwarding to MCP logging messages.
+- Subprocesses run via execa with shell:false; capture stdout/stderr, respect AbortSignal, and store output via report:// resources.
+- Never add fallback logic that hides failures; surface actionable errors and instructions instead.
+- Paths should be normalized via resolve(); config files checked with fs.existsSync before invoking CLI.
+- Progress notifications follow boot→scanning→analyzing→formatting→done semantics when the caller provided a progressToken.

@@ -1,21 +1,42 @@
-import { buildLogger } from "../utils/context.js";
-import type { ToolExtra } from "../toolContext.js";
-import { runCommand } from "../utils/command.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult } from '@modelcontextprotocol/sdk/dist/esm/types';
+import type { ToolContext } from '../types.js';
+import { runCoderabbitSubcommand } from '../lib/coderabbit.js';
+import { createLogger, createStopwatch } from '../logger.js';
+import { storeReport } from '../resources/outputsStore.js';
 
-export async function authStatus(_: object, extra: ToolExtra): Promise<CallToolResult> {
-  const logger = buildLogger("auth_status", extra);
-  logger.info("auth_status.begin");
+const log = createLogger('tools.auth_status');
 
-  const result = await runCommand("coderabbit", ["auth", "status"], logger, {
-    signal: extra.signal,
-    timeoutMs: 30 * 1000,
+export async function authStatus(ctx: ToolContext): Promise<CallToolResult> {
+  const stopwatch = createStopwatch();
+  const result = await runCoderabbitSubcommand(['auth', 'status'], {
+    signal: ctx.signal,
+    timeoutMs: 30_000
   });
 
-  const combined = `${result.stdout}\n${result.stderr}`.trim();
-  const match = combined.match(/Logged in as\s+(.*)/i);
-  const status = match ? `ログイン済み: ${match[1].trim()}` : combined || "未ログインの可能性があります";
+  const combined = result.all ?? `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
+  const durationMs = stopwatch();
+  const { uri } = storeReport({
+    tool: 'auth_status',
+    title: 'auth_status output',
+    body: combined,
+    durationMs
+  });
 
-  logger.success("auth_status.completed", { parsed: match?.[1] });
-  return { content: [{ type: "text", text: status }] } satisfies CallToolResult;
+  if ((result.exitCode ?? 0) !== 0) {
+    await log.error('auth status failed', { exitCode: result.exitCode, uri });
+    throw new Error(`coderabbit auth status failed with code ${result.exitCode}. See ${uri}`);
+  }
+
+  const match = combined.match(/Logged in as\s+(.+)/i);
+  const summary = match ? `Logged in as ${match[1].trim()}` : 'Login status output available in report.';
+  await log.success('auth status retrieved', { uri, summary }, durationMs);
+
+  return {
+    content: [
+      {
+        type: 'text',
+        text: `${summary}\nReport: ${uri}`
+      }
+    ]
+  };
 }

@@ -1,51 +1,48 @@
 {
   "name": "coderabbitai-cli-mcp",
   "version": "0.1.0",
-  "description": "Model Context Protocol server that bootstraps and runs CodeRabbit CLI with every option exposed.",
+  "description": "Model Context Protocol server that exposes the CodeRabbit CLI with full bootstrap, auth, and diagnostics tooling.",
   "type": "module",
   "bin": {
     "coderabbitai-cli-mcp": "./bin/coderabbitai-cli-mcp"
   },
   "main": "dist/server.js",
+  "exports": {
+    ".": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    }
+  },
   "files": [
     "dist",
     "bin",
     "README.md",
-    "LICENSE",
-    "_docs"
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/server.ts",
-    "lint": "tsc --noEmit",
-    "start": "node dist/server.js",
-    "prepare": "npm run build"
+    "clean": "rm -rf dist"
   },
   "keywords": [
-    "model-context-protocol",
     "mcp",
     "coderabbit",
     "cli",
-    "ai",
-    "devtools"
+    "review",
+    "ai"
   ],
   "author": "",
   "license": "MIT",
-  "engines": {
-    "node": ">=18.17"
-  },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.1.0",
-    "execa": "^9.5.0",
-    "express": "^4.19.2",
-    "lru-cache": "^11.0.1",
-    "picocolors": "^1.0.0",
-    "zod": "^3.23.8"
+    "@modelcontextprotocol/sdk": "^1.20.2",
+    "execa": "^9.6.0",
+    "lru-cache": "^11.2.2",
+    "picocolors": "^1.1.1",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
-    "@types/express": "^4.17.21",
-    "@types/node": "^22.7.4",
-    "tsx": "^4.19.0",
-    "typescript": "^5.6.3"
+    "@types/node": "^24.9.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
   }
 }

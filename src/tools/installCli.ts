@@ -1,47 +1,99 @@
-import os from "node:os";
-import { buildLogger } from "../utils/context.js";
-import type { ToolExtra } from "../toolContext.js";
-import type { InstallCliInput } from "../types.js";
-import { runCommand } from "../utils/command.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import os from 'node:os';
+import { execa } from 'execa';
+import { z } from 'zod';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/dist/esm/types';
+import { createLogger, createStopwatch } from '../logger.js';
+import { storeReport } from '../resources/outputsStore.js';
+import { clearCachedBinary } from '../lib/coderabbit.js';
+import type { ToolContext } from '../types.js';
+import { sendProgress } from '../progress.js';
 
-export const INSTALL_COMMAND = "curl -fsSL https://cli.coderabbit.ai/install.sh | sh";
+const log = createLogger('tools.install_cli');
 
-export async function installCli(args: InstallCliInput, extra: ToolExtra): Promise<CallToolResult> {
-  const logger = buildLogger("install_cli", extra);
-  logger.info("install_cli.begin", { args });
+export const InstallCliArgsSchema = z.object({
+  dryRun: z.boolean().optional().default(false),
+  confirm: z.boolean().optional().default(false)
+});
 
-  const platform = os.platform();
-  if (platform === "win32") {
-    const message = `Windows では CodeRabbit CLI は公式サポートされていません。WSL2 上で \`${INSTALL_COMMAND}\` を実行してください。`;
-    logger.warning("install_cli.unsupported_platform", { platform });
-    return { content: [{ type: "text", text: message }] } satisfies CallToolResult;
-  }
+export type InstallCliArgs = z.infer<typeof InstallCliArgsSchema>;
 
-  if (args.dryRun) {
-    logger.info("install_cli.dry_run", { command: INSTALL_COMMAND });
-    return {
-      content: [
-        {
-          type: "text",
-          text: `dryRun=true のため以下を実行予定です:\n${INSTALL_COMMAND}`,
-        },
-      ],
-    } satisfies CallToolResult;
-  }
-
-  const result = await runCommand("sh", ["-c", INSTALL_COMMAND], logger, {
-    timeoutMs: 5 * 60 * 1000,
-    signal: extra.signal,
-  });
-
-  logger.success("install_cli.completed", { stdout: result.stdout });
+export async function installCli(rawArgs: unknown, ctx: ToolContext): Promise<CallToolResult> {
+  const args = InstallCliArgsSchema.parse(rawArgs ?? {});
+  const result = await performInstall(args, ctx);
   return {
     content: [
       {
-        type: "text",
-        text: result.stdout || "CodeRabbit CLI installation finished.",
-      },
-    ],
-  } satisfies CallToolResult;
+        type: 'text',
+        text: result.summary
+      }
+    ]
+  };
+}
+
+export async function performInstall(args: InstallCliArgs, ctx?: ToolContext): Promise<{ summary: string }> {
+  const platform = os.platform();
+  const stopwatch = createStopwatch();
+
+  if (platform === 'win32') {
+    const summary = 'Windows では公式に WSL2 上でのインストールが推奨されています。WSL 内で curl -fsSL https://cli.coderabbit.ai/install.sh | sh を実行してください。';
+    await log.warn('windows install not available, suggest WSL2');
+    return { summary };
+  }
+
+  if (!['darwin', 'linux'].includes(platform)) {
+    throw new Error(`Unsupported platform ${platform}. Only macOS or Linux are supported.`);
+  }
+
+  const installCmd = 'curl -fsSL https://cli.coderabbit.ai/install.sh | sh';
+  await log.info('install command prepared', { installCmd, dryRun: args.dryRun });
+  if (ctx) {
+    await sendProgress(ctx, { progress: 10, total: 100, message: 'preparing installer' });
+  }
+
+  if (args.dryRun) {
+    return { summary: `Dry-run: installer command would be:\n${installCmd}` };
+  }
+
+  if (!args.confirm) {
+    throw new Error('Set confirm=true to execute install_cli. The command downloads and runs the official installer.');
+  }
+
+  const child = execa('sh', ['-c', installCmd], {
+    stdout: 'pipe',
+    stderr: 'pipe',
+    timeout: 5 * 60 * 1000,
+    signal: ctx?.signal
+  });
+
+  let combined = '';
+  child.stdout?.on('data', (chunk: Buffer | string) => {
+    combined += chunk.toString();
+  });
+  child.stderr?.on('data', (chunk: Buffer | string) => {
+    combined += chunk.toString();
+  });
+
+  const result = await child;
+  const exitCode = result.exitCode ?? 0;
+  const durationMs = stopwatch();
+
+  const { uri } = storeReport({
+    tool: 'install_cli',
+    title: `install_cli exit ${exitCode}`,
+    body: combined,
+    durationMs
+  });
+
+  if (exitCode !== 0) {
+    await log.error('installer failed', { exitCode, uri });
+    throw new Error(`installer failed with code ${exitCode}. See ${uri}`);
+  }
+
+  clearCachedBinary();
+  await log.success('installer completed', { uri }, durationMs);
+  if (ctx) {
+    await sendProgress(ctx, { progress: 100, total: 100, message: 'install completed' });
+  }
+
+  return { summary: `CodeRabbit CLI installed successfully. Logs stored at ${uri}.` };
 }

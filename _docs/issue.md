@@ -1,13 +1,8 @@
-# Issue backlog
+# issue backlog
 
-1. **HTTP セッションの同時実行安全性**
-   - 現状は HTTP リクエストごとに `StreamableHTTPServerTransport` を生成しているが、同時実行が増えると 1 つの `McpServer` での多重接続がボトルネックになる懸念がある。
-   - 対応案: セッション ID ベースの transport 管理 or リクエストごとに `McpServer` を生成。
-
-2. **o3 アーキテクチャ助言の欠如**
-   - o3 MCP への問い合わせが全て timeout となり、公式な設計レビューを得られていない。
-   - 対応案: サービス復旧後に再度質問し、ログに記録。
-
-3. **CLI ヘルプ構造の自動同期**
-   - `cli_help` は Zod スキーマを動的に更新しないため、CLI 側で新フラグが追加された際に README との乖離が発生しうる。
-   - 対応案: `cli_help` のパース結果を README に反映するスクリプトを追加。
+1. **WSL 検出・自動手順**
+   - 現状 `install_cli` は Windows 環境に対して WSL を案内するのみ。`/proc/version` から WSL 実行中かを判別し、WSL 内であれば Linux と同じパスで自動インストールができるようにする。
+2. **report:// 永続化**
+   - LRU がプロセスメモリのみなので再起動時に履歴が消える。`~/.cache/coderabbitai-cli-mcp` などへ暗号化せずに書き出すオプションを追加し、ログ完全性をさらに高めたい。
+3. **CLI help との README 連動**
+   - `cli_help` で抽出したフラグ一覧を README/ドキュメントに自動反映するスクリプトを追加し、「新フラグ検知 → ドキュメント更新」のパイプラインを自動化する。

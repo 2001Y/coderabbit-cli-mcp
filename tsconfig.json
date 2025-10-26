@@ -2,20 +2,23 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "NodeNext",
-    "moduleResolution": "nodenext",
-    "moduleDetection": "force",
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "NodeNext",
+    "baseUrl": ".",
+    "paths": {
+      "@modelcontextprotocol/sdk/dist/esm/types": ["node_modules/@modelcontextprotocol/sdk/dist/esm/types.js"],
+      "@modelcontextprotocol/sdk/dist/esm/shared/protocol": ["node_modules/@modelcontextprotocol/sdk/dist/esm/shared/protocol.js"]
+    },
+    "typeRoots": ["./types", "./node_modules/@types"],
     "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "sourceMap": true,
-    "declaration": true,
-    "declarationMap": true,
     "resolveJsonModule": true,
+    "declaration": true,
+    "sourceMap": true,
     "outDir": "dist",
     "rootDir": "src"
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src", "types"],
+  "exclude": ["dist", "node_modules"]
 }

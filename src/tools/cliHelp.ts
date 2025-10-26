@@ -1,53 +1,68 @@
-import { buildLogger } from "../utils/context.js";
-import type { ToolExtra } from "../toolContext.js";
-import { runCommand } from "../utils/command.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult } from '@modelcontextprotocol/sdk/dist/esm/types';
+import { runCoderabbitSubcommand } from '../lib/coderabbit.js';
+import { createLogger, createStopwatch } from '../logger.js';
+import { storeReport } from '../resources/outputsStore.js';
 
-type ParsedFlag = {
+const log = createLogger('tools.cli_help');
+
+type FlagDescriptor = {
   flag: string;
   alias?: string;
-  arg?: string;
+  parameter?: string;
   description?: string;
 };
 
-function parseHelp(helpText: string): ParsedFlag[] {
+function parseFlags(helpText: string): FlagDescriptor[] {
+  const descriptors: FlagDescriptor[] = [];
   const lines = helpText.split(/\r?\n/);
-  const flags: ParsedFlag[] = [];
-  const regex = /^\s*(?:(-\w)[,\s]*)?--([\w-]+)(?:\s+([<\[].+[>\]]))?\s*(.*)$/;
-
+  const flagLine = /^\s*(?:(-\w),\s*)?(--[\w-]+)(?:\s+<([^>]+)>)?\s*(.*)$/;
   for (const line of lines) {
-    const match = line.match(regex);
+    const match = flagLine.exec(line);
     if (!match) continue;
-    const [, alias, longFlag, arg, desc] = match;
-    flags.push({
-      flag: `--${longFlag}`,
-      alias: alias ?? undefined,
-      arg: arg?.trim(),
-      description: desc?.trim(),
+    const [, shortFlag, longFlag, param, desc] = match;
+    descriptors.push({
+      flag: longFlag,
+      alias: shortFlag ?? undefined,
+      parameter: param ?? undefined,
+      description: desc?.trim() || undefined
     });
   }
-
-  return flags;
+  return descriptors;
 }
 
-export async function cliHelp(_: object, extra: ToolExtra): Promise<CallToolResult> {
-  const logger = buildLogger("cli_help", extra);
-  logger.info("cli_help.begin");
-
-  const result = await runCommand("coderabbit", ["--help"], logger, {
-    signal: extra.signal,
-    timeoutMs: 30 * 1000,
+export async function cliHelp(): Promise<CallToolResult> {
+  const stopwatch = createStopwatch();
+  const result = await runCoderabbitSubcommand(['--help'], {
+    timeoutMs: 15_000
   });
 
-  const text = result.stdout || result.combined || result.stderr;
-  const flags = parseHelp(text);
-  logger.success("cli_help.completed", { parsedCount: flags.length });
+  const combined = result.all ?? `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
+  const durationMs = stopwatch();
+  const { uri } = storeReport({
+    tool: 'cli_help',
+    title: 'cli_help output',
+    body: combined,
+    durationMs
+  });
 
-  const summary = JSON.stringify(flags, null, 2);
+  if ((result.exitCode ?? 0) !== 0) {
+    await log.error('help command failed', { exitCode: result.exitCode, uri });
+    throw new Error(`coderabbit --help failed with code ${result.exitCode}. See ${uri}`);
+  }
+
+  const flags = parseFlags(combined);
+  await log.success('parsed help output', { flagCount: flags.length, uri }, durationMs);
+
   return {
     content: [
-      { type: "text", text: text.trim() },
-      { type: "text", text: `parsedFlags=\n${summary}` },
-    ],
-  } satisfies CallToolResult;
+      {
+        type: 'text',
+        text: `cli_help captured ${flags.length} flags. report: ${uri}`
+      },
+      {
+        type: 'text',
+        text: JSON.stringify(flags, null, 2)
+      }
+    ]
+  };
 }

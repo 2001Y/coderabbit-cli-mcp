@@ -1,33 +1,53 @@
-import { URL } from "node:url";
-import { buildLogger } from "../utils/context.js";
-import type { ToolExtra } from "../toolContext.js";
-import { runCommand } from "../utils/command.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { z } from 'zod';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/dist/esm/types';
+import type { ToolContext } from '../types.js';
+import { runCoderabbitSubcommand } from '../lib/coderabbit.js';
+import { createLogger, createStopwatch } from '../logger.js';
+import { storeReport } from '../resources/outputsStore.js';
 
-const URL_REGEX = /https?:\/\/\S+/gi;
+const log = createLogger('tools.auth_login');
 
-export async function authLogin(_: object, extra: ToolExtra): Promise<CallToolResult> {
-  const logger = buildLogger("auth_login", extra);
-  logger.info("auth_login.begin");
+export const AuthLoginArgsSchema = z.object({
+  extraArgs: z.array(z.string()).optional()
+});
 
-  const result = await runCommand("coderabbit", ["auth", "login"], logger, {
-    signal: extra.signal,
-    timeoutMs: 2 * 60 * 1000,
+export async function authLogin(rawArgs: unknown, ctx: ToolContext): Promise<CallToolResult> {
+  const args = AuthLoginArgsSchema.parse(rawArgs ?? {});
+  const stopwatch = createStopwatch();
+  const argv = ['auth', 'login', ...(args.extraArgs ?? [])];
+  await log.info('starting coderabbit auth login', { argv });
+
+  const result = await runCoderabbitSubcommand(argv, {
+    signal: ctx.signal,
+    timeoutMs: 5 * 60 * 1000
   });
 
-  const combined = `${result.stdout}\n${result.stderr}`;
-  const match = combined.match(URL_REGEX)?.[0];
-  let text = combined.trim();
+  const combined = result.all ?? `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
+  const durationMs = stopwatch();
+  const { uri } = storeReport({
+    tool: 'auth_login',
+    title: 'auth_login output',
+    body: combined,
+    durationMs
+  });
 
-  if (match) {
-    try {
-      const url = new URL(match.trim());
-      text = `ブラウザで次の URL を開いて認証してください:\n${url.toString()}`;
-    } catch (error) {
-      logger.warning("auth_login.url_parse_failed", { error: String(error), match });
-    }
+  if ((result.exitCode ?? 0) !== 0) {
+    await log.error('auth login failed', { exitCode: result.exitCode, uri });
+    throw new Error(`coderabbit auth login failed with code ${result.exitCode}. See ${uri}`);
   }
 
-  logger.success("auth_login.completed", { hasUrl: Boolean(match) });
-  return { content: [{ type: "text", text }] } satisfies CallToolResult;
+  const match = combined.match(/https?:\/\/\S+/);
+  const url = match ? match[0].replace(/[)\]]+$/, '') : undefined;
+  await log.success('auth login completed', { uri, hasUrl: Boolean(url) }, durationMs);
+
+  return {
+    content: [
+      {
+        type: 'text',
+        text: url
+          ? `Open the following URL to finish authentication:\n${url}\nOutput saved: ${uri}`
+          : `Authentication output stored at ${uri}. Follow the CLI instructions shown.`
+      }
+    ]
+  };
 }

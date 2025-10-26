@@ -1,0 +1,4 @@
+- Run `npm run build` to ensure TypeScript compiles to dist without errors.
+- If tool behavior changed, update README and `_docs` notes plus mention new/changed MCP tools.
+- Verify key flows locally (e.g., `npm run dev` + `mcp call run_review {...}` or at least dry-run ensure_cli) and capture any missing logs/resources.
+- Summarize remaining risks or TODOs in `_docs/issue.md` before handing back to the user.
