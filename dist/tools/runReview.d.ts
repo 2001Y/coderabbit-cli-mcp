@@ -7,9 +7,6 @@ export declare const RunReviewArgsSchema: z.ZodObject<{
     base: z.ZodOptional<z.ZodString>;
     baseCommit: z.ZodOptional<z.ZodString>;
     cwd: z.ZodOptional<z.ZodString>;
-    configFiles: z.ZodOptional<z.ZodArray<z.ZodString, "many">>;
-    noColor: z.ZodOptional<z.ZodBoolean>;
-    timeoutSec: z.ZodOptional<z.ZodNumber>;
     extraArgs: z.ZodOptional<z.ZodArray<z.ZodString, "many">>;
 }, "strip", z.ZodTypeAny, {
     mode: "plain" | "prompt-only" | "interactive";
@@ -17,20 +14,16 @@ export declare const RunReviewArgsSchema: z.ZodObject<{
     cwd?: string | undefined;
     base?: string | undefined;
     baseCommit?: string | undefined;
-    configFiles?: string[] | undefined;
-    noColor?: boolean | undefined;
-    timeoutSec?: number | undefined;
     extraArgs?: string[] | undefined;
 }, {
+    mode?: "plain" | "prompt-only" | "interactive" | undefined;
     type?: "uncommitted" | "all" | "committed" | undefined;
     cwd?: string | undefined;
-    mode?: "plain" | "prompt-only" | "interactive" | undefined;
     base?: string | undefined;
     baseCommit?: string | undefined;
-    configFiles?: string[] | undefined;
-    noColor?: boolean | undefined;
-    timeoutSec?: number | undefined;
     extraArgs?: string[] | undefined;
 }>;
-export type RunReviewArgs = z.infer<typeof RunReviewArgsSchema>;
+export type RunReviewArgs = z.infer<typeof RunReviewArgsSchema> & {
+    configFiles?: string[];
+};
 export declare function runReview(rawArgs: unknown, ctx: ToolContext): Promise<CallToolResult>;

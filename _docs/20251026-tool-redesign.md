@@ -14,7 +14,7 @@
    - CLI 実行が exit code ≠ 0 だった場合も stdout/stderr を解析し、「未ログイン」「設定不足」など初回エラーに対する案内を組み込む。
    - すべての案内には「Codex は自力で解決を試みず、ユーザーへ状況報告して指示を仰ぐ」文言を必ず含める。
 3. **ヘルパーは最小限**
-   - ガイド文字列を生成する `buildInstallGuide()` だけを残し、ツール実装ファイルは `run_review.ts` のみにする。
+   - ガイド文字列を生成する `buildInstallGuide()` と、env/TOML 設定を読み込む `config.ts` のみを残し、MCP Tool は `run_review.ts` だけに集約する。
 
 ## 実装メモ
 - server の tool 登録から `ensure_cli` / `install_cli` / `auth_*` / `version` / `cli_help` / `write_config` / `doctor` を削除。

@@ -17,6 +17,7 @@ src/
   resources/outputsStore.ts // report://{tool}/{id} ストア + resource/list/read 実装
   lib/
     coderabbit.ts           // バイナリ検出/キャッシュ、バージョン確認
+    config.ts               // env (CODERRABBIT_MCP_DEFAULTS/LOCK) または coderabbit-mcp.config.toml から defaults/lock を読み込み
   tools/
     runReview.ts            // 唯一の実行ツール。セットアップガイドも内包
     installGuide.ts         // OS 別インストール手順を生成するヘルパー

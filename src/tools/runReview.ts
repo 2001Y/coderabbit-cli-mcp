@@ -9,8 +9,11 @@ import type { ToolContext } from '../types.js';
 import { sendProgress } from '../progress.js';
 import { storeReport } from '../resources/outputsStore.js';
 import { buildInstallGuide } from './installGuide.js';
+import { getRunReviewConfig, type RunReviewConfigSection } from '../config.js';
 
 const USER_ESCALATION_NOTE = 'Codex must stop here, report the situation to the requesting user, and wait for further instructions.';
+const CONFIG_FILES_WARNING = 'Recommended option CODERRABBIT_MCP_LOCK_CONFIG_FILES is not set. You may point to custom review config files, or simply pass agents.md to capture project guidance—please configure it.';
+const TOOL_TIMEOUT_WARNING = 'tool_timeout_sec appears unset or too low (reviews can take 7–30+ minutes). Increase tool_timeout_sec in ~/.codex/config.toml to at least 1200 seconds and mirror the value in CODERRABBIT_TOOL_TIMEOUT_SEC.';
 
 const log = createLogger('tools.run_review');
 
@@ -20,13 +23,12 @@ export const RunReviewArgsSchema = z.object({
   base: z.string().optional(),
   baseCommit: z.string().optional(),
   cwd: z.string().optional(),
-  configFiles: z.array(z.string()).optional(),
-  noColor: z.boolean().optional(),
-  timeoutSec: z.number().int().positive().max(4 * 3600).optional(),
   extraArgs: z.array(z.string()).optional()
 });
 
-export type RunReviewArgs = z.infer<typeof RunReviewArgsSchema>;
+export type RunReviewArgs = z.infer<typeof RunReviewArgsSchema> & {
+  configFiles?: string[];
+};
 
 function buildArgv(parsed: RunReviewArgs): string[] {
   const args: string[] = [];
@@ -39,7 +41,7 @@ function buildArgv(parsed: RunReviewArgs): string[] {
 
   if (parsed.base) args.push('--base', parsed.base);
   if (parsed.baseCommit) args.push('--base-commit', parsed.baseCommit);
-  if (parsed.noColor) args.push('--no-color');
+  args.push('--no-color');
   if (parsed.cwd) args.push('--cwd', resolve(parsed.cwd));
 
   if (parsed.configFiles?.length) {
@@ -60,7 +62,15 @@ function buildArgv(parsed: RunReviewArgs): string[] {
 }
 
 export async function runReview(rawArgs: unknown, ctx: ToolContext): Promise<CallToolResult> {
-  const args = RunReviewArgsSchema.parse(rawArgs ?? {});
+  const parsedArgs = RunReviewArgsSchema.parse(rawArgs ?? {});
+  const config = getRunReviewConfig();
+  const warnings = collectWarnings(config);
+  const argsWithDefaults = applyConfigDefaults(parsedArgs, config);
+  const { args: args, overrides } = applyConfigLocks(argsWithDefaults, config);
+  for (const override of overrides) {
+    void log.info('run_review option locked', override);
+  }
+
   const stopwatch = createStopwatch();
   const argv = buildArgv(args);
   const cwd = args.cwd ? resolve(args.cwd) : process.cwd();
@@ -90,7 +100,6 @@ export async function runReview(rawArgs: unknown, ctx: ToolContext): Promise<Cal
   }
   const child = execa(binary, argv, {
     cwd,
-    timeout: (args.timeoutSec ?? 3600) * 1000,
     cancelSignal: ctx.signal,
     stdout: 'pipe',
     stderr: 'pipe',
@@ -141,6 +150,10 @@ export async function runReview(rawArgs: unknown, ctx: ToolContext): Promise<Cal
         `\nLog capture: ${uri}`,
         `\n${USER_ESCALATION_NOTE}`
       ].filter(Boolean) as string[];
+      const warningText = formatWarnings(warnings);
+      if (warningText) {
+        messageParts.unshift(warningText);
+      }
       throw new Error(messageParts.join('\n'));
     }
 
@@ -150,7 +163,7 @@ export async function runReview(rawArgs: unknown, ctx: ToolContext): Promise<Cal
       content: [
         {
           type: 'text',
-          text: `CodeRabbit review completed in ${(durationMs / 1000).toFixed(1)}s. See ${uri}`
+          text: formatWarningsBlock(warnings, `CodeRabbit review completed in ${(durationMs / 1000).toFixed(1)}s. See ${uri}`)
         }
       ]
     };
@@ -177,4 +190,65 @@ function buildAuthGuide(): string {
     '2. Run `coderabbit auth status` and confirm it prints "Logged in as ...".',
     '3. Re-run run_review once the CLI reports a logged-in state.'
   ].join('\n');
+}
+
+function collectWarnings(config: RunReviewConfigSection): string[] {
+  const warnings: string[] = [];
+  if (!config.lock?.configFiles?.length) {
+    warnings.push(CONFIG_FILES_WARNING);
+  }
+  const declaredTimeout = Number(process.env.CODERRABBIT_TOOL_TIMEOUT_SEC ?? '');
+  if (!Number.isFinite(declaredTimeout) || declaredTimeout < 600) {
+    warnings.push(TOOL_TIMEOUT_WARNING);
+  }
+  return warnings;
+}
+
+function formatWarningsBlock(warnings: string[], message: string): string {
+  const prefix = formatWarnings(warnings);
+  return prefix ? `${prefix}\n\n${message}` : message;
+}
+
+function formatWarnings(warnings: string[]): string | null {
+  if (!warnings.length) {
+    return null;
+  }
+  return warnings.map((warning) => `⚠️ ${warning}`).join('\n');
+}
+
+function applyConfigDefaults(args: RunReviewArgs, _config: RunReviewConfigSection): RunReviewArgs {
+  return args;
+}
+
+function applyConfigLocks(args: RunReviewArgs, config: RunReviewConfigSection): { args: RunReviewArgs; overrides: Array<{ key: string; previous: unknown; value: unknown }>; } {
+  if (!config.lock) {
+    return { args, overrides: [] };
+  }
+  const next: RunReviewArgs = { ...args };
+  const overrides: Array<{ key: string; previous: unknown; value: unknown }> = [];
+  for (const [key, value] of Object.entries(config.lock)) {
+    if (typeof value === 'undefined') continue;
+    const typedKey = key as keyof RunReviewArgs;
+    const previous = (next as Record<string, unknown>)[typedKey];
+    if (!isEqual(previous, value)) {
+      overrides.push({ key, previous, value });
+    }
+    (next as Record<string, unknown>)[typedKey] = cloneValue(value);
+  }
+  return { args: next, overrides };
+}
+
+function cloneValue<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return [...value] as T;
+  }
+  return value;
+}
+
+function isEqual(a: unknown, b: unknown): boolean {
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    return a.every((item, index) => item === b[index]);
+  }
+  return a === b;
 }
