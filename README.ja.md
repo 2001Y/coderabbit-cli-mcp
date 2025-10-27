@@ -19,39 +19,36 @@ codex mcp add coderabbit-cli-mcp \
 [mcp_servers.coderabbit-cli-mcp]
 command = "npx"
 args = ["coderabbit-cli-mcp@latest"]
-tool_timeout_sec = 1800  # 7〜30分のレビューを想定
+# tool_timeout_sec = 1800  # 7〜30分のレビューを想定
 # startup_timeout_sec = 60
 
 [mcp_servers.coderabbit-cli-mcp.env]
 # CODERRABBIT_MCP_LOCK_MODE = "plain"
 # CODERRABBIT_MCP_LOCK_TYPE = "uncommitted"
 # CODERRABBIT_MCP_LOCK_CONFIG_FILES = '[".coderabbit.yaml"]'
-# CODERRABBIT_TOOL_TIMEOUT_SEC = "1800"
 ```
 
-- 必要な行だけアンコメントして利用してください（上の例は公開 npm 版を想定。ローカル開発版は Quickstart の `tsx` 実行コマンドを使ってください）。
-- `tool_timeout_sec` は既定 60 秒なので、長いレビューでは必ず引き上げてください。
+- `tool_timeout_sec` は既定 60 秒なので、引き上げることを推奨します。7 分から 30 分と公式ドキュメントには書かれている。
 - `CODERRABBIT_MCP_LOCK_MODE` / `_TYPE` は文字列、`_CONFIG_FILES` は JSON 配列（CodeRabbit の `-c` フラグは複数指定可）で記述します。
-- `CODERRABBIT_TOOL_TIMEOUT_SEC` には `tool_timeout_sec` と同じ値を設定し、このサーバー側で設定状況を検知できるようにします。
-- これら 3 つの値は MCP 呼び出し時の引数では受け付けません。Codex 側の環境設定でのみ指定してください。
+- これらの値は MCP 呼び出しの引数よりも優先され、上書きされた内容はログに出力されます。
 
 ## 提供ツール
 
-| Tool         | 役割                                                                                                                  | 主要引数                                                                    |
-| ------------ | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Tool         | 役割                                                                                                                  | 主要引数                                                   |
+| ------------ | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
 | `run_review` | CodeRabbit CLI を完全な引数セットで実行。障害時はその場でセットアップ手順と「ユーザーへ報告して指示を仰ぐ」旨を返す。 | `mode`, `type`, `base`, `baseCommit`, `cwd`, `extraArgs[]` |
 
 ### run_review の引数
 
-| 引数          | 型                                      | 説明                             | 既定値                           |
-| ------------- | --------------------------------------- | -------------------------------- | -------------------------------- |
-| `mode`        | `interactive` / `plain` / `prompt-only` | CodeRabbit CLI の出力モード      | `plain`                          |
-| `type`        | `all` / `committed` / `uncommitted`     | レビュー対象範囲                 | `all`                            |
-| `base`        | `string`                                | `--base` に相当                  | 指定なし                         |
-| `baseCommit`  | `string`                                | `--base-commit` に相当           | 指定なし                         |
-| `cwd`         | `string`                                | CLI 実行ディレクトリ（存在必須） | サーバー起動時の `process.cwd()` |
-| `configFiles` | `string[]`                              | `CODERRABBIT_MCP_LOCK_CONFIG_FILES`（JSON 配列）で固定 | 指定なし |
-| `extraArgs`   | `string[]`                              | 末尾に付与する追加引数           | 指定なし                         |
+| 引数          | 型                                      | 説明                                                   | 既定値                           |
+| ------------- | --------------------------------------- | ------------------------------------------------------ | -------------------------------- |
+| `mode`        | `interactive` / `plain` / `prompt-only` | CodeRabbit CLI の出力モード                            | `plain`                          |
+| `type`        | `all` / `committed` / `uncommitted`     | レビュー対象範囲                                       | `all`                            |
+| `base`        | `string`                                | `--base` に相当                                        | 指定なし                         |
+| `baseCommit`  | `string`                                | `--base-commit` に相当                                 | 指定なし                         |
+| `cwd`         | `string`                                | CLI 実行ディレクトリ（存在必須）                       | サーバー起動時の `process.cwd()` |
+| `configFiles` | `string[]`                              | `CODERRABBIT_MCP_LOCK_CONFIG_FILES`（JSON 配列）で固定 | 指定なし                         |
+| `extraArgs`   | `string[]`                              | 末尾に付与する追加引数                                 | 指定なし                         |
 
 - `--no-color` は常に付与され、MCP クライアントにはプレーンテキストで渡ります。
 - MCP サーバー側で独自タイムアウトは設定しません（CodeRabbit CLI の挙動に従います）。
